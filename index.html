@@ -23,6 +23,28 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    /* ========== شاشة التحميل ========== */
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(145deg, #f5f7fa 0%, #e8eef5 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .loading-screen i {
+      font-size: 50px;
+      color: #fbbf24;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
     /* ========== هيدر الماسنجر ========== */
     .messenger-header {
       position: fixed;
@@ -629,25 +651,6 @@
       bottom: 40px;
     }
 
-    /* تحميل */
-    .loading-spinner {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 50px;
-    }
-
-    .loading-spinner i {
-      font-size: 35px;
-      color: #fbbf24;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
     /* حالة الحظر */
     .blocked-message {
       text-align: center;
@@ -660,8 +663,13 @@
 </head>
 <body>
 
+<!-- شاشة التحميل -->
+<div class="loading-screen" id="loadingScreen">
+  <i class="fas fa-spinner"></i>
+</div>
+
 <!-- هيدر الماسنجر -->
-<div class="messenger-header">
+<div class="messenger-header" style="display: none;">
   <div class="back-btn" onclick="goBack()">
     <i class="fas fa-arrow-right"></i>
   </div>
@@ -673,7 +681,7 @@
 </div>
 
 <!-- مربع البحث -->
-<div class="search-section">
+<div class="search-section" style="display: none;">
   <div class="search-wrapper">
     <i class="fas fa-search"></i>
     <input type="text" id="searchChatsInput" placeholder="ابحث عن محادثة..." autocomplete="off">
@@ -682,8 +690,10 @@
 </div>
 
 <!-- قائمة المحادثات -->
-<div class="chats-container" id="chatsContainer">
-  <div class="loading-spinner"><i class="fas fa-spinner"></i></div>
+<div class="chats-container" id="chatsContainer" style="display: none;">
+  <div style="text-align: center; padding: 50px;">
+    <i class="fas fa-spinner" style="font-size: 35px; color: #fbbf24; animation: spin 1s linear infinite;"></i>
+  </div>
 </div>
 
 <!-- غرفة الدردشة -->
@@ -788,6 +798,7 @@
   let unsubscribeMessages = null;
   let chatToDelete = null;
   let userToBlock = null;
+  let isInitialized = false;
 
   // دوال مساعدة
   function showToast(msg, isSuccess = true) {
@@ -797,6 +808,14 @@
     t.style.background = isSuccess ? '#10b981' : '#ef4444';
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  // إخفاء شاشة التحميل وإظهار المحتوى
+  function showMainContent() {
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.querySelector('.messenger-header').style.display = 'flex';
+    document.querySelector('.search-section').style.display = 'flex';
+    document.getElementById('chatsContainer').style.display = 'block';
   }
 
   // دالة الرجوع للصفحة الرئيسية
@@ -864,7 +883,6 @@
           }
         }
         
-        // جلب آخر رسالة
         if (chat.lastMessageTime) {
           const messagesQuery = query(
             collection(db, "chats", chat.id, "messages"),
@@ -982,7 +1000,6 @@
     
     const isOtherBlocked = activeChatData.blockedBy?.includes(otherUid);
     
-    // تحديث واجهة الغرفة
     document.getElementById('chatRoomAvatar').innerHTML = renderAvatar(activeOtherUser);
     document.getElementById('chatRoomAvatar').style.borderColor = activeOtherUser?.colors?.frame || '#fbbf24';
     document.getElementById('chatRoomName').innerHTML = `
@@ -991,12 +1008,10 @@
     `;
     document.getElementById('chatRoomStatus').textContent = isOtherBlocked ? 'محظور' : 'متصل';
     
-    // تحديث زر الحظر
     const blockBtn = document.getElementById('blockBtn');
     blockBtn.style.color = isOtherBlocked ? '#10b981' : '#64748b';
     blockBtn.title = isOtherBlocked ? 'إلغاء الحظر' : 'حظر المستخدم';
     
-    // تعطيل الإدخال إذا كان العضو الآخر محظوراً
     const inputContainer = document.getElementById('messageInputContainer');
     
     if (isOtherBlocked) {
@@ -1017,25 +1032,18 @@
       }, 100);
     }
     
-    // إعادة تعيين عداد الرسائل غير المقروءة
     if (!isOtherBlocked) {
       try {
         await updateDoc(doc(db, "chats", chatId), {
           [`unreadCount.${currentUser.uid}`]: 0
         });
-      } catch (e) {
-        console.error("خطأ في تحديث عداد القراءة:", e);
-      }
+      } catch (e) {}
     }
     
-    // مراقبة الرسائل
     subscribeToMessages(chatId);
-    
-    // إظهار الغرفة
     document.getElementById('chatRoom').classList.add('active');
   };
 
-  // مراقبة الرسائل وتحديث حالة القراءة
   function subscribeToMessages(chatId) {
     if (unsubscribeMessages) unsubscribeMessages();
     
@@ -1059,9 +1067,7 @@
       
       if (unreadMessages.length > 0) {
         const batch = writeBatch(db);
-        unreadMessages.forEach(ref => {
-          batch.update(ref, { read: true });
-        });
+        unreadMessages.forEach(ref => batch.update(ref, { read: true }));
         await batch.commit();
       }
       
@@ -1069,7 +1075,6 @@
     });
   }
 
-  // عرض الرسائل
   function renderMessages(messages) {
     const container = document.getElementById('messagesContainer');
     if (!container) return;
@@ -1129,7 +1134,6 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  // إرسال رسالة
   window.sendMessage = async function() {
     const input = document.getElementById('messageInput');
     if (!input) return;
@@ -1146,14 +1150,9 @@
     }
     
     try {
-      const messageData = {
-        text: text,
-        senderId: currentUser.uid,
-        timestamp: Date.now(),
-        read: false
-      };
-      
-      await addDoc(collection(db, "chats", activeChatId, "messages"), messageData);
+      await addDoc(collection(db, "chats", activeChatId, "messages"), {
+        text, senderId: currentUser.uid, timestamp: Date.now(), read: false
+      });
       
       await updateDoc(doc(db, "chats", activeChatId), {
         lastMessageText: text,
@@ -1175,12 +1174,10 @@
       
       input.value = '';
     } catch (error) {
-      console.error("خطأ في إرسال الرسالة:", error);
       showToast('فشل إرسال الرسالة', false);
     }
   };
 
-  // إغلاق غرفة الدردشة
   window.closeChatRoom = function() {
     document.getElementById('chatRoom').classList.remove('active');
     if (unsubscribeMessages) {
@@ -1192,13 +1189,11 @@
     activeOtherUser = null;
   };
 
-  // عرض نافذة الحذف
   window.showDeleteModal = function(chatId) {
     chatToDelete = chatId;
     document.getElementById('deleteConfirmModal').classList.add('active');
   };
 
-  // تأكيد حذف المحادثة
   window.confirmDeleteChat = async function() {
     if (!chatToDelete) return;
     
@@ -1212,16 +1207,12 @@
       showToast('تم حذف المحادثة');
       closeConfirmModal();
       
-      if (activeChatId === chatToDelete) {
-        closeChatRoom();
-      }
+      if (activeChatId === chatToDelete) closeChatRoom();
     } catch (error) {
-      console.error("خطأ في الحذف:", error);
       showToast('فشل حذف المحادثة', false);
     }
   };
 
-  // حذف المحادثة من داخل الغرفة
   window.deleteChatFromRoom = function() {
     if (activeChatId) {
       chatToDelete = activeChatId;
@@ -1229,7 +1220,6 @@
     }
   };
 
-  // عرض نافذة الحظر
   window.showBlockModal = function(chatId, userId) {
     userToBlock = { chatId, userId };
     const chat = chats.find(c => c.id === chatId);
@@ -1243,7 +1233,6 @@
     document.getElementById('blockConfirmModal').classList.add('active');
   };
 
-  // حظر المستخدم من داخل الغرفة
   window.blockUserFromChat = function() {
     if (activeChatId && activeOtherUser) {
       userToBlock = { chatId: activeChatId, userId: activeOtherUser.uid };
@@ -1258,7 +1247,6 @@
     }
   };
 
-  // تأكيد الحظر
   window.confirmBlockUser = async function() {
     if (!userToBlock) return;
     
@@ -1269,57 +1257,23 @@
       const userIdToBlock = userToBlock.userId;
       
       if (blockedBy.includes(userIdToBlock)) {
-        await updateDoc(chatRef, {
-          blockedBy: blockedBy.filter(id => id !== userIdToBlock)
-        });
+        await updateDoc(chatRef, { blockedBy: blockedBy.filter(id => id !== userIdToBlock) });
         showToast('تم إلغاء الحظر');
       } else {
-        await updateDoc(chatRef, {
-          blockedBy: [...blockedBy, userIdToBlock]
-        });
+        await updateDoc(chatRef, { blockedBy: [...blockedBy, userIdToBlock] });
         showToast('تم حظر المستخدم');
       }
       
       closeConfirmModal();
       
       if (activeChatId === userToBlock.chatId) {
-        const otherUid = activeChatData.participants.find(p => p !== currentUser.uid);
-        const updatedChat = await getDoc(chatRef);
-        if (updatedChat.exists()) {
-          activeChatData = { id: userToBlock.chatId, ...updatedChat.data() };
-          const isOtherBlocked = activeChatData.blockedBy?.includes(otherUid);
-          
-          document.getElementById('chatRoomStatus').textContent = isOtherBlocked ? 'محظور' : 'متصل';
-          const blockBtn = document.getElementById('blockBtn');
-          blockBtn.style.color = isOtherBlocked ? '#10b981' : '#64748b';
-          blockBtn.title = isOtherBlocked ? 'إلغاء الحظر' : 'حظر المستخدم';
-          
-          const inputContainer = document.getElementById('messageInputContainer');
-          if (isOtherBlocked) {
-            inputContainer.innerHTML = '<div class="blocked-message"><i class="fas fa-ban"></i> لقد قمت بحظر هذا المستخدم - لا يمكنك إرسال رسائل</div>';
-          } else {
-            inputContainer.innerHTML = `
-              <input type="text" id="messageInput" placeholder="اكتب رسالتك..." autocomplete="off">
-              <button onclick="sendMessage()" id="sendBtn"><i class="fas fa-paper-plane"></i></button>
-            `;
-            setTimeout(() => {
-              const msgInput = document.getElementById('messageInput');
-              if (msgInput) {
-                msgInput.addEventListener('keypress', (e) => {
-                  if (e.key === 'Enter') sendMessage();
-                });
-              }
-            }, 100);
-          }
-        }
+        closeChatRoom();
       }
     } catch (error) {
-      console.error("خطأ في الحظر:", error);
       showToast('فشل العملية', false);
     }
   };
 
-  // إغلاق نافذة التأكيد
   window.closeConfirmModal = function() {
     document.getElementById('deleteConfirmModal').classList.remove('active');
     document.getElementById('blockConfirmModal').classList.remove('active');
@@ -1327,7 +1281,6 @@
     userToBlock = null;
   };
 
-  // عرض نافذة محادثة جديدة
   window.showNewChatModal = function() {
     document.getElementById('newChatModal').classList.add('active');
     document.getElementById('newChatUserId').value = '';
@@ -1337,7 +1290,6 @@
     document.getElementById('newChatModal').classList.remove('active');
   };
 
-  // بدء محادثة جديدة
   window.startNewChat = async function() {
     const userId = document.getElementById('newChatUserId').value.trim();
     
@@ -1369,134 +1321,64 @@
       let existingChatId = null;
       
       existingChats.forEach(doc => {
-        const data = doc.data();
-        if (data.participants.includes(otherUid)) {
-          existingChatId = doc.id;
-        }
+        if (doc.data().participants.includes(otherUid)) existingChatId = doc.id;
       });
       
       closeNewChatModal();
       
       if (existingChatId) {
         openChat(existingChatId);
-        showToast('تم فتح المحادثة');
       } else {
-        const newChat = {
+        const chatRef = await addDoc(collection(db, "chats"), {
           participants: [currentUser.uid, otherUid],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          unreadCount: {},
-          blockedBy: []
-        };
-        
-        const chatRef = await addDoc(collection(db, "chats"), newChat);
+          createdAt: Date.now(), updatedAt: Date.now(),
+          unreadCount: {}, blockedBy: []
+        });
         openChat(chatRef.id);
-        showToast('تم بدء محادثة جديدة');
       }
+      
+      showToast('تم فتح المحادثة');
     } catch (error) {
-      console.error("خطأ في بدء المحادثة:", error);
       showToast('فشل بدء المحادثة', false);
     }
   };
 
-  // فتح محادثة من رابط خارجي
-  async function openChatFromUrl() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get('openChat');
-    
-    if (userId && currentUser) {
-      try {
-        const userByIdDoc = await getDoc(doc(db, "users_by_id", userId));
-        if (userByIdDoc.exists()) {
-          const otherUid = userByIdDoc.data().uid;
-          
-          const existingChatQuery = query(
-            collection(db, "chats"),
-            where("participants", "array-contains", currentUser.uid)
-          );
-          
-          const existingChats = await getDocs(existingChatQuery);
-          let existingChatId = null;
-          
-          existingChats.forEach(doc => {
-            const data = doc.data();
-            if (data.participants.includes(otherUid)) {
-              existingChatId = doc.id;
-            }
-          });
-          
-          if (existingChatId) {
-            setTimeout(() => openChat(existingChatId), 500);
-          } else {
-            const newChat = {
-              participants: [currentUser.uid, otherUid],
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              unreadCount: {},
-              blockedBy: []
-            };
-            
-            const chatRef = await addDoc(collection(db, "chats"), newChat);
-            setTimeout(() => openChat(chatRef.id), 500);
-          }
-        }
-      } catch (error) {
-        console.error("خطأ في فتح المحادثة:", error);
-      }
-    }
-  }
-
-  // فتح محادثة من localStorage (من الصفحة الرئيسية)
   async function openChatFromStorage() {
     const targetUserId = localStorage.getItem('openChatWith');
+    if (!targetUserId || !currentUser) return;
     
-    if (targetUserId && currentUser) {
-      localStorage.removeItem('openChatWith');
+    localStorage.removeItem('openChatWith');
+    
+    try {
+      const userByIdDoc = await getDoc(doc(db, "users_by_id", targetUserId));
+      if (!userByIdDoc.exists()) return;
       
-      try {
-        const userByIdDoc = await getDoc(doc(db, "users_by_id", targetUserId));
-        if (!userByIdDoc.exists()) {
-          showToast('المستخدم غير موجود', false);
-          return;
-        }
-        
-        const otherUid = userByIdDoc.data().uid;
-        
-        const existingChatQuery = query(
-          collection(db, "chats"),
-          where("participants", "array-contains", currentUser.uid)
-        );
-        
-        const existingChats = await getDocs(existingChatQuery);
-        let existingChatId = null;
-        
-        existingChats.forEach(doc => {
-          const data = doc.data();
-          if (data.participants.includes(otherUid)) {
-            existingChatId = doc.id;
-          }
+      const otherUid = userByIdDoc.data().uid;
+      
+      const existingChatQuery = query(
+        collection(db, "chats"),
+        where("participants", "array-contains", currentUser.uid)
+      );
+      
+      const existingChats = await getDocs(existingChatQuery);
+      let existingChatId = null;
+      
+      existingChats.forEach(doc => {
+        if (doc.data().participants.includes(otherUid)) existingChatId = doc.id;
+      });
+      
+      if (existingChatId) {
+        openChat(existingChatId);
+      } else {
+        const chatRef = await addDoc(collection(db, "chats"), {
+          participants: [currentUser.uid, otherUid],
+          createdAt: Date.now(), updatedAt: Date.now(),
+          unreadCount: {}, blockedBy: []
         });
-        
-        if (existingChatId) {
-          openChat(existingChatId);
-        } else {
-          const newChat = {
-            participants: [currentUser.uid, otherUid],
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            unreadCount: {},
-            blockedBy: []
-          };
-          
-          const chatRef = await addDoc(collection(db, "chats"), newChat);
-          openChat(chatRef.id);
-        }
-        
-        showToast('تم فتح المحادثة');
-      } catch (error) {
-        console.error("خطأ في فتح المحادثة:", error);
-        showToast('فشل فتح المحادثة', false);
+        openChat(chatRef.id);
       }
+    } catch (error) {
+      console.error("خطأ:", error);
     }
   }
 
@@ -1511,19 +1393,29 @@
     showToast('تم التحديث');
   };
 
-  // مراقبة المصادقة - مرة واحدة فقط
+  // المصادقة - مرة واحدة فقط
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       currentUser = user;
       await loadUserData(user.uid);
-      subscribeToChats();
       
-      // فتح محادثة من localStorage أو URL
-      setTimeout(openChatFromStorage, 1000);
-      setTimeout(openChatFromUrl, 800);
+      if (!isInitialized) {
+        isInitialized = true;
+        subscribeToChats();
+        showMainContent();
+        
+        // فتح محادثة من localStorage إذا وجدت
+        setTimeout(() => {
+          if (localStorage.getItem('openChatWith')) {
+            openChatFromStorage();
+          }
+        }, 1000);
+      }
     } else {
-      // الرجوع لصفحة تسجيل الدخول
-      window.location.href = 'index.html';
+      // إذا لم يكن مسجل دخول، ارجع لصفحة تسجيل الدخول
+      if (!window.location.href.includes('index.html')) {
+        window.location.href = 'index.html';
+      }
     }
   });
 
